@@ -1,4 +1,29 @@
-# LowMEM ws2812b library ( ws2812b_stm32F3 )
+# LowMEM ws2812b library ( ws2812b_stm32F3 ) - RGBW version
+
+---
+
+Original Description below.
+This Fork expands the functionality to `RGBW` compatible LEDs. 
+Tested with `IN-PI55QATPRPGPBPW-30` LEDS on `STM32F303CC`.
+
+**Changes made**
+
+The library was expanded to use 4 instead of 3 bytes per color value. Some offsets change from 24 Bit to 32 Bit.
+Animations require dealing with this as well, use `frameBuffer[i*4 + 1]` instead of `frameBuffer[i*3 + 1]`.
+
+Also removed gamma correction since the rainbow (mixing colors) does not look nice.
+
+**Further "Documentation" - How to use the Library"
+
+Example Code:
+
+- [jcrademacher/led-wall-code](https://github.com/jcrademacher/led-wall-code/blob/master/Src/led.c)
+- [AdvancedElectricLongboard/LongboardSTM32FW](https://github.com/AdvancedElectricLongboard/LongboardSTM32FW/blob/d1bcd9f4a01e853b393d1290d1470bcba5dda73a/AdvancedElectricLongboard/Core/Src/visEffect.c)
+- Github Search for "`#define WS2812B_PINS`" or something similar and look for other repos
+
+
+---
+
 This is a memory and CPU efficient implementation of WS2812B library for STM32 processors. **You have to compile it with -Og or at least -O1 optimizations to take advantage of it.**
 
 **See my other repositories for F0 and F4 port.**

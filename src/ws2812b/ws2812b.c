@@ -23,8 +23,8 @@ extern WS2812_Struct ws2812b;
 uint32_t WS2812_IO_High[] =  { WS2812B_PINS };
 uint32_t WS2812_IO_Low[] = {WS2812B_PINS << 16};
 
-// WS2812 framebuffer - buffer for 2 LEDs - two times 24 bits
-uint16_t ws2812bDmaBitBuffer[24 * 2];
+// WS2812 framebuffer - buffer for 2 LEDs - two times 32 bits
+uint16_t ws2812bDmaBitBuffer[32 * 2];
 
 // Gamma correction table
 const uint8_t gammaTable[] = {
@@ -209,11 +209,12 @@ static void loadNextFramebufferData(WS2812_BufferItem *bItem, uint32_t row)
 	uint32_t r = bItem->frameBufferPointer[bItem->frameBufferCounter++];
 	uint32_t g = bItem->frameBufferPointer[bItem->frameBufferCounter++];
 	uint32_t b = bItem->frameBufferPointer[bItem->frameBufferCounter++];
+	uint32_t w = bItem->frameBufferPointer[bItem->frameBufferCounter++];
 
 	if(bItem->frameBufferCounter == bItem->frameBufferSize)
 		bItem->frameBufferCounter = 0;
 
-	ws2812b_set_pixel(bItem->channel, row, r, g, b);
+	ws2812b_set_pixel(bItem->channel, row, r, g, b, w);
 }
 
 
@@ -230,7 +231,7 @@ static void WS2812_sendbuf()
 		ws2812b.item[i].frameBufferCounter = 0;
 
 		loadNextFramebufferData(&ws2812b.item[i], 0); // ROW 0
-		loadNextFramebufferData(&ws2812b.item[i], 1); // ROW 0
+		loadNextFramebufferData(&ws2812b.item[i], 1); // ROW 1   // why is this required? what is row number 1 ?
 	}
 
 	// clear all DMA flags
@@ -262,10 +263,6 @@ static void WS2812_sendbuf()
 	__HAL_TIM_ENABLE(&Tim2Handle);
 }
 
-
-
-
-
 void DMA_TransferHalfHandler(DMA_HandleTypeDef *DmaHandle)
 {
 	#if defined(LED4_PORT)
@@ -285,7 +282,7 @@ void DMA_TransferHalfHandler(DMA_HandleTypeDef *DmaHandle)
 	} else {
 		// If this is the last pixel, set the next pixel value to zeros, because
 		// the DMA would not stop exactly at the last bit.
-		ws2812b_set_pixel(0, 0, 0, 0, 0);
+		ws2812b_set_pixel(0, 0, 0, 0, 0, 0);
 	}
 
 	#if defined(LED4_PORT)
@@ -365,22 +362,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 }
 
-
-
-static void ws2812b_set_pixel(uint8_t row, uint16_t column, uint8_t red, uint8_t green, uint8_t blue)
+void ws2812b_set_pixel(uint8_t row, uint16_t column, uint8_t red, uint8_t green, uint8_t blue, uint8_t white)
 {
-
 	// Apply gamma
-	red = gammaTable[red];
-	green = gammaTable[green];
-	blue = gammaTable[blue];
+	//red = gammaTable[red];
+	//green = gammaTable[green];
+	//blue = gammaTable[blue];
+	//white = gammaTable[white];
 
-
-	uint32_t calcCol = (column*24);
+	uint32_t calcCol = (column*32);
 	uint32_t invRed = ~red;
 	uint32_t invGreen = ~green;
 	uint32_t invBlue = ~blue;
-
+	uint32_t invWhite = ~white;
 
 #if defined(SETPIX_1)
 	uint8_t i;
@@ -389,14 +383,16 @@ static void ws2812b_set_pixel(uint8_t row, uint16_t column, uint8_t red, uint8_t
 	{
 		// clear the data for pixel
 
-		ws2812bDmaBitBuffer[(calcCol+i)] &= calcClearRow;
-		ws2812bDmaBitBuffer[(calcCol+8+i)] &= calcClearRow;
+		ws2812bDmaBitBuffer[(calcCol+ 0+i)] &= calcClearRow;
+		ws2812bDmaBitBuffer[(calcCol+ 8+i)] &= calcClearRow;
 		ws2812bDmaBitBuffer[(calcCol+16+i)] &= calcClearRow;
+		ws2812bDmaBitBuffer[(calcCol+24+i)] &= calcClearRow;
 
 		// write new data for pixel
-		ws2812bDmaBitBuffer[(calcCol+i)] |= (((((invGreen)<<i) & 0x80)>>7)<<row);
-		ws2812bDmaBitBuffer[(calcCol+8+i)] |= (((((invRed)<<i) & 0x80)>>7)<<row);
+		ws2812bDmaBitBuffer[(calcCol+ 0+i)] |= (((((invGreen)<<i) & 0x80)>>7)<<row);
+		ws2812bDmaBitBuffer[(calcCol+ 8+i)] |= (((((invRed)<<i) & 0x80)>>7)<<row);
 		ws2812bDmaBitBuffer[(calcCol+16+i)] |= (((((invBlue)<<i) & 0x80)>>7)<<row);
+		ws2812bDmaBitBuffer[(calcCol+24+i)] |= (((((invWhite)<<i) & 0x80)>>7)<<row);
 	}
 #elif defined(SETPIX_2)
 	uint8_t i;
@@ -419,39 +415,52 @@ static void ws2812b_set_pixel(uint8_t row, uint16_t column, uint8_t red, uint8_t
 		else
 			varResetBit(ws2812bDmaBitBuffer[(calcCol+16+i)], row);
 
+		if(((invWhite)<<i) & 0x80)
+			varSetBit(ws2812bDmaBitBuffer[(calcCol+24+i)], row);
+		else
+			varResetBit(ws2812bDmaBitBuffer[(calcCol+24+i)], row);
+
 	}
 #elif defined(SETPIX_3)
-	ws2812bDmaBitBuffer[(calcCol+0)] |= (((((invGreen)<<0) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+0)] |= (((((invRed)<<0) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+0)] |= (((((invGreen)<<0) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+0)] |= (((((invRed)<<0) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+0)] |= (((((invBlue)<<0) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+0)] |= (((((invWhite)<<0) & 0x80)>>7)<<row);
 
-	ws2812bDmaBitBuffer[(calcCol+1)] |= (((((invGreen)<<1) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+1)] |= (((((invRed)<<1) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+1)] |= (((((invGreen)<<1) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+1)] |= (((((invRed)<<1) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+1)] |= (((((invBlue)<<1) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+1)] |= (((((invWhite)<<1) & 0x80)>>7)<<row);
 
-	ws2812bDmaBitBuffer[(calcCol+2)] |= (((((invGreen)<<2) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+2)] |= (((((invRed)<<2) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+2)] |= (((((invGreen)<<2) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+2)] |= (((((invRed)<<2) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+2)] |= (((((invBlue)<<2) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+2)] |= (((((invWhite)<<2) & 0x80)>>7)<<row);
 
-	ws2812bDmaBitBuffer[(calcCol+3)] |= (((((invGreen)<<3) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+3)] |= (((((invRed)<<3) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+3)] |= (((((invGreen)<<3) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+3)] |= (((((invRed)<<3) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+3)] |= (((((invBlue)<<3) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+3)] |= (((((invWhite)<<3) & 0x80)>>7)<<row);
 
-	ws2812bDmaBitBuffer[(calcCol+4)] |= (((((invGreen)<<4) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+4)] |= (((((invRed)<<4) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+4)] |= (((((invGreen)<<4) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+4)] |= (((((invRed)<<4) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+4)] |= (((((invBlue)<<4) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+4)] |= (((((invWhite)<<4) & 0x80)>>7)<<row);
 
-	ws2812bDmaBitBuffer[(calcCol+5)] |= (((((invGreen)<<5) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+5)] |= (((((invRed)<<5) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+5)] |= (((((invGreen)<<5) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+5)] |= (((((invRed)<<5) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+5)] |= (((((invBlue)<<5) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+5)] |= (((((invWhite)<<5) & 0x80)>>7)<<row);
 
-	ws2812bDmaBitBuffer[(calcCol+6)] |= (((((invGreen)<<6) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+6)] |= (((((invRed)<<6) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+6)] |= (((((invGreen)<<6) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+6)] |= (((((invRed)<<6) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+6)] |= (((((invBlue)<<6) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+6)] |= (((((invWhite)<<6) & 0x80)>>7)<<row);
 
-	ws2812bDmaBitBuffer[(calcCol+7)] |= (((((invGreen)<<7) & 0x80)>>7)<<row);
-	ws2812bDmaBitBuffer[(calcCol+8+7)] |= (((((invRed)<<7) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 0+7)] |= (((((invGreen)<<7) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+ 8+7)] |= (((((invRed)<<7) & 0x80)>>7)<<row);
 	ws2812bDmaBitBuffer[(calcCol+16+7)] |= (((((invBlue)<<7) & 0x80)>>7)<<row);
+	ws2812bDmaBitBuffer[(calcCol+24+7)] |= (((((invWhite)<<7) & 0x80)>>7)<<row);
 #elif defined(SETPIX_4)
 
 	// Bitband optimizations with pure increments, 5us interrupts
@@ -529,6 +538,31 @@ static void ws2812b_set_pixel(uint8_t row, uint16_t column, uint8_t red, uint8_t
 	bitBand+=16;
 
 	*bitBand = (invBlue >> 0);
+	bitBand+=16;
+
+	// WHITE
+	*bitBand =  (invWhite >> 7);
+	bitBand+=16;
+
+	*bitBand = (invWhite >> 6);
+	bitBand+=16;
+
+	*bitBand = (invWhite >> 5);
+	bitBand+=16;
+
+	*bitBand = (invWhite >> 4);
+	bitBand+=16;
+
+	*bitBand = (invWhite >> 3);
+	bitBand+=16;
+
+	*bitBand = (invWhite >> 2);
+	bitBand+=16;
+
+	*bitBand = (invWhite >> 1);
+	bitBand+=16;
+
+	*bitBand = (invWhite >> 0);
 	bitBand+=16;
 
 #endif

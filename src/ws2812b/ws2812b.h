@@ -19,31 +19,25 @@
 // GPIO enable command
 #define WS2812B_GPIO_CLK_ENABLE() __HAL_RCC_GPIOC_CLK_ENABLE()
 // LED output port
-#define WS2812B_PORT GPIOC
+#define WS2812B_PORT GPIOA
 // LED output pins
-#define WS2812B_PINS (GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3)
+#define WS2812B_PINS (GPIO_PIN_7 | GPIO_PIN_10)
 // How many LEDs are in the series
-#define WS2812B_NUMBER_OF_LEDS 60
+#define WS2812B_NUMBER_OF_LEDS 2
 
 // Number of output LED strips. Each has its own buffer.
-#define WS2812_BUFFER_COUNT 2
+#define WS2812_BUFFER_COUNT 1
 
 // Choose one of the bit-juggling setpixel implementation
 // *******************************************************
 //#define SETPIX_1	// For loop, works everywhere, slow
-//#define SETPIX_2	// Bit band in a loop
+#define SETPIX_2	// Bit band in a loop
 //#define SETPIX_3	// Like SETPIX_1 but with unrolled loop
-#define SETPIX_4	// Fastest copying using bit-banding
+//#define SETPIX_4	// Fastest copying using bit-banding
 
 
 // DEBUG OUTPUT
 // ********************
-#define LED4_PORT GPIOC
-#define LED4_PIN GPIO_PIN_10
-
-#define LED5_PORT GPIOC
-#define LED5_PIN GPIO_PIN_10
-
 
 // Public functions
 // ****************
@@ -52,8 +46,8 @@ void ws2812b_handle();
 
 // Library structures
 // ******************
-// This value sets number of periods to generate 50uS Treset signal
-#define WS2812_RESET_PERIOD 12
+// This value sets number of periods to generate 80uS Treset signal
+#define WS2812_RESET_PERIOD 20
 
 typedef struct WS2812_BufferItem {
 	uint8_t* frameBufferPointer;
@@ -87,7 +81,7 @@ WS2812_Struct ws2812b;
 #define varResetBit(var,bit) (Var_ResetBit_BB((uint32_t)&var,bit))
 #define varGetBit(var,bit) (Var_GetBit_BB((uint32_t)&var,bit))
 
-static void ws2812b_set_pixel(uint8_t row, uint16_t column, uint8_t red, uint8_t green, uint8_t blue);
+void ws2812b_set_pixel(uint8_t row, uint16_t column, uint8_t red, uint8_t green, uint8_t blue, uint8_t white);
 void DMA_TransferCompleteHandler(DMA_HandleTypeDef *DmaHandle);
 void DMA_TransferHalfHandler(DMA_HandleTypeDef *DmaHandle);
 
